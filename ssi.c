@@ -43,6 +43,36 @@ int main(int argc, char *argv[]) {
     printf("You input: %s\n", user_input);
     //TODO determine if they typed cd/bglist or bg .../any other program 
         // create functions to handle each of these seperately
+    char *first_token = strtok(user_input, " ");
+    printf("first token: %s\n", first_token);
+    char *tokens = strtok(NULL, " ");    
+    if (strcmp(first_token, "cd") == 0){
+        //* CHANGING DIRECTORIES
+        printf("first_token is cd\n");
+        // how do I join back the cd into a string with the rest of the tokens 
+        // how do I execute this command to change directories
+    } else if (strcmp(first_token, "bg") == 0){
+        //* BACKGROUND EXECUTION 
+        printf("first_token is bg\n");        
+        while (tokens!= NULL){
+            printf("next token: %s\n", tokens);
+            tokens = strtok(NULL, " ");
+        }
+    } else if (strcmp(first_token, "bglist") == 0){
+        //* BACKGROUND EXECUTION LIST
+        printf("first_token is bglist\n");
+        while (tokens!= NULL){
+            printf("next token: %s\n", tokens);
+            tokens = strtok(NULL, " ");
+        }
+    } else {
+        //* FOREGROUND EXECUTION
+        printf("first_token is a function to run\n");
+        while (tokens!= NULL){
+            printf("next token: %s\n", tokens);
+            tokens = strtok(NULL, " ");
+        }
+    }        
     return 0;
 }
 
