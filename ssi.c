@@ -34,42 +34,51 @@ char* prompt_input(){
     return NULL;
 }
 
-char* change_dir(char *path){
+int change_dir(char *path){
     // get the current working directory
     char cwd[PATH_MAX];
     if(getcwd(cwd, sizeof(cwd)) != NULL){
-        printf("cwd: %s\n", cwd);
+        // split the path with / as a delimeter, loop through to determine new path
+        char *token = strtok(path, "/");
+        while(token != NULL) {
+            // determine if we are going in or out of a directory 
+            if (strcmp(token, "..") == 0){
+                char *last_slash;
+                last_slash = strrchr(cwd, '/');
+                if (last_slash != NULL) {
+                    *(last_slash) = '\0';
+                }
+            } else {
+                //! need to add something for if the path doesnt exist
+                strcat(cwd, "/");
+                strcat(cwd, token);  
+            }
+            token = strtok(NULL, "/");        
+        }
+        printf("new updated path: %s\n", cwd);
+
+        // copy cwd into *final_cwd to be returned if not NULL
+        // char *final_cwd = malloc(strlen(cwd)+1);
+        // if(final_cwd != NULL){
+        //     strcpy(final_cwd, cwd);
+        //     return final_cwd;
+        // } 
     } else {
         printf("getcwd() error");
+        return -1;
     }
 
-    // split the path with / as a delimeter, loop through to determine new path
-    char *token = strtok(path, "/");
-    while(token != NULL) {
-        // determine if we are going in or out of a directory 
-        if (strcmp(token, "..") == 0){
-            char *last_slash;
-            last_slash = strrchr(cwd, '/');
-            if (last_slash != NULL) {
-                *(last_slash) = '\0';
-            }
-        } else {
-            //! need to add something for if the path doesnt exist
-            strcat(cwd, "/");
-            strcat(cwd, token);  
-        }
-        token = strtok(NULL, "/");        
-    }
-    printf("new updated path: %s\n", cwd);
 
-    // copy cwd into *final_cwd to be returned if not NULL
-    char *final_cwd = malloc(strlen(cwd)+1);
-    if(final_cwd != NULL){
-        strcpy(final_cwd, cwd);
-        return final_cwd;
-    } 
-    printf("cwd is null\n");
-    return NULL;
+    //! maybe instead of returning the path I should just change to the directory cwd when im finished 
+    // maybe something like:
+    if (chdir(cwd) == 0) {
+        return 0;
+    } else {        
+        return -1;
+    }
+
+    // printf("do I have to cover for anything else?\n");
+    // return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -90,7 +99,12 @@ int main(int argc, char *argv[]) {
         printf("first_token is cd\n");
         // how do I execute this command to change directories
         printf("next token: %s\n", token);
-        char *cwd = change_dir(token);        
+        // char *cwd = change_dir(token);       
+        if (change_dir(token) == 0) {
+            printf("successfully changed directory\n");                        
+        } else {
+            perror("Failed to change directory");
+        }
         //? should I actually be changing directories or just keeping track of what directory I should be in and then using this to execute files and such?
     } else if (strcmp(first_token, "bg") == 0){
         //* BACKGROUND EXECUTION 
