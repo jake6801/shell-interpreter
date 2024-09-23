@@ -34,58 +34,27 @@ char* prompt_input(){
     return NULL;
 }
 
-int change_dir(char *path){
-    // get the current working directory
-    char cwd[PATH_MAX];
-    if(getcwd(cwd, sizeof(cwd)) != NULL){
-        // split the path with / as a delimeter, loop through to determine new path
-        char *token = strtok(path, "/");
-        while(token != NULL) {
-            // determine if we are going in or out of a directory 
-            if (strcmp(token, "..") == 0){
-                char *last_slash;
-                last_slash = strrchr(cwd, '/');
-                if (last_slash != NULL) {
-                    *(last_slash) = '\0';
-                }
-            } else {
-                //! need to add something for if the path doesnt exist
-                strcat(cwd, "/");
-                strcat(cwd, token);  
-            }
-            token = strtok(NULL, "/");        
-        }
-        printf("new updated path: %s\n", cwd);
-
-    } else {
-        printf("getcwd() error");
-        return -1;
-    }
-    return chdir(cwd);
-}
-
 int main(int argc, char *argv[]) {
-    while (1) {
-        //TODO still need to put this all in a loop of some sort (probably while)
+    //! need to do something for if user just presses enter and doesnt type anything 
+    while (1) {        
         char* user_input = prompt_input();
         if(user_input == NULL){
             printf("something went wrong, user input is null\n");
             return 0;
         }
-        printf("You input: %s\n", user_input);
-        //TODO determine if they typed cd/bglist or bg .../any other program 
-            // create functions to handle each of these seperately
+        printf("You input: %s\n", user_input);        
         char *first_token = strtok(user_input, " ");
         printf("first token: %s\n", first_token);
         char *token = strtok(NULL, " ");    
         if (strcmp(first_token, "cd") == 0){
             //* CHANGING DIRECTORIES
             printf("next token: %s\n", token);
-            if (change_dir(token) == 0) {
-                printf("successfully changed directory\n");                        
+            //! I CAN ACTUALLY JUST PUT THE TOKEN DIRECTLY INTO chdir() instead of using this change_dir() function I made 
+            if (chdir(token) == 0){
+                printf("successfully changed directory\n");
             } else {
                 perror("Failed to change directory");
-            }        
+            }             
         } else if (strcmp(first_token, "bg") == 0){
             //* BACKGROUND EXECUTION 
             printf("first_token is bg\n");        
