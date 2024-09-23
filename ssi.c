@@ -57,77 +57,58 @@ int change_dir(char *path){
         }
         printf("new updated path: %s\n", cwd);
 
-        // copy cwd into *final_cwd to be returned if not NULL
-        // char *final_cwd = malloc(strlen(cwd)+1);
-        // if(final_cwd != NULL){
-        //     strcpy(final_cwd, cwd);
-        //     return final_cwd;
-        // } 
     } else {
         printf("getcwd() error");
         return -1;
     }
-
-
-    //! maybe instead of returning the path I should just change to the directory cwd when im finished 
-    // maybe something like:
-    if (chdir(cwd) == 0) {
-        return 0;
-    } else {        
-        return -1;
-    }
-
-    // printf("do I have to cover for anything else?\n");
-    // return NULL;
+    return chdir(cwd);
 }
 
 int main(int argc, char *argv[]) {
-    //TODO still need to put this all in a loop of some sort (probably while)
-    char* user_input = prompt_input();
-    if(user_input == NULL){
-        printf("something went wrong, user input is null\n");
-        return 0;
-    }
-    printf("You input: %s\n", user_input);
-    //TODO determine if they typed cd/bglist or bg .../any other program 
-        // create functions to handle each of these seperately
-    char *first_token = strtok(user_input, " ");
-    printf("first token: %s\n", first_token);
-    char *token = strtok(NULL, " ");    
-    if (strcmp(first_token, "cd") == 0){
-        //* CHANGING DIRECTORIES
-        printf("first_token is cd\n");
-        // how do I execute this command to change directories
-        printf("next token: %s\n", token);
-        // char *cwd = change_dir(token);       
-        if (change_dir(token) == 0) {
-            printf("successfully changed directory\n");                        
+    while (1) {
+        //TODO still need to put this all in a loop of some sort (probably while)
+        char* user_input = prompt_input();
+        if(user_input == NULL){
+            printf("something went wrong, user input is null\n");
+            return 0;
+        }
+        printf("You input: %s\n", user_input);
+        //TODO determine if they typed cd/bglist or bg .../any other program 
+            // create functions to handle each of these seperately
+        char *first_token = strtok(user_input, " ");
+        printf("first token: %s\n", first_token);
+        char *token = strtok(NULL, " ");    
+        if (strcmp(first_token, "cd") == 0){
+            //* CHANGING DIRECTORIES
+            printf("next token: %s\n", token);
+            if (change_dir(token) == 0) {
+                printf("successfully changed directory\n");                        
+            } else {
+                perror("Failed to change directory");
+            }        
+        } else if (strcmp(first_token, "bg") == 0){
+            //* BACKGROUND EXECUTION 
+            printf("first_token is bg\n");        
+            while (token!= NULL){
+                printf("next token: %s\n", token);
+                token = strtok(NULL, " ");
+            }
+        } else if (strcmp(first_token, "bglist") == 0){
+            //* BACKGROUND EXECUTION LIST
+            printf("first_token is bglist\n");
+            while (token!= NULL){
+                printf("next token: %s\n", token);
+                token = strtok(NULL, " ");
+            }
         } else {
-            perror("Failed to change directory");
-        }
-        //? should I actually be changing directories or just keeping track of what directory I should be in and then using this to execute files and such?
-    } else if (strcmp(first_token, "bg") == 0){
-        //* BACKGROUND EXECUTION 
-        printf("first_token is bg\n");        
-        while (token!= NULL){
-            printf("next token: %s\n", token);
-            token = strtok(NULL, " ");
-        }
-    } else if (strcmp(first_token, "bglist") == 0){
-        //* BACKGROUND EXECUTION LIST
-        printf("first_token is bglist\n");
-        while (token!= NULL){
-            printf("next token: %s\n", token);
-            token = strtok(NULL, " ");
-        }
-    } else {
-        //* FOREGROUND EXECUTION
-        printf("first_token is a function to run\n");
-        while (token!= NULL){
-            printf("next token: %s\n", token);
-            token = strtok(NULL, " ");
-        }
-    }        
+            //* FOREGROUND EXECUTION
+            printf("first_token is a function to run\n");
+            while (token!= NULL){
+                printf("next token: %s\n", token);
+                token = strtok(NULL, " ");
+            }
+        }       
+    }
     return 0;
 }
 
