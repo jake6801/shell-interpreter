@@ -6,6 +6,12 @@
 #include <string.h>
 #include <sys/wait.h>
 
+struct bg_pro {
+    pid_t pid;
+    char **command; 
+    struct bg_pro* next;
+};
+
 char* prompt_input(){
     // get users login, hostame, and cwd then construct and print prompt
     char cwd[PATH_MAX];
@@ -37,40 +43,85 @@ char* prompt_input(){
 int main(int argc, char *argv[]) {
     //! need to do something for if user just presses enter and doesnt type anything 
     //! do we need to worry about piped commands? or anything involving changing directories and running things?
+    // struct bg_pro* root = (struct bg_pro*)malloc(sizeof(struct bg_pro));
+    struct bg_pro root;
+    root.next = NULL;
     while (1) {        
         char* user_input = prompt_input();
         if(user_input == NULL){
             printf("something went wrong, user input is null\n");
             return 0;
         }
-        printf("You input: %s\n", user_input);        
         char *first_token = strtok(user_input, " ");
-        printf("first token: %s\n", first_token);
         char *token = strtok(NULL, " ");    
         if (strcmp(first_token, "cd") == 0){
             //* CHANGING DIRECTORIES
             // determine whether to go to home directory or somewhere else
             if (token == NULL || strcmp(token, "~") == 0) {
                 char *home_dir = getenv("HOME");
-                if (chdir(home_dir) == 0) {
-                    printf("successfully changed directory\n");
-                } else {
-                    perror("Failed to change directory");
-                }
+                // if (chdir(home_dir) == 0) {
+                //     printf("successfully changed directory\n");
+                // } else {
+                //     perror("Failed to change directory");
+                // }
+                chdir(home_dir);
             } else {
-                if (chdir(token) == 0){
-                    printf("successfully changed directory\n");
-                } else {
-                    perror("Failed to change directory");
-                }
+                // if (chdir(token) == 0){
+                //     printf("successfully changed directory\n");
+                // } else {
+                //     perror("Failed to change directory");
+                // }
+                chdir(token);
+                //! need to do something for if the directory doesnt exist 
             }            
         } else if (strcmp(first_token, "bg") == 0){
             //* BACKGROUND EXECUTION 
-            printf("first_token is bg\n");        
-            while (token!= NULL){
-                printf("next token: %s\n", token);
+            // printf("first_token is bg\n");        
+            // first breakup into parent and child 
+                // would I only be running 1 bg process at a time? (1 child at a time?)
+            
+            // fork to create parent and child processes
+            pid_t pid = fork();
+            // get the command and options and put in a list
+            char *args[10]; //! what should this number be?
+            int i = 0;
+            // args[i++] = first_token;
+            while (token != NULL) {
+                args[i++] = token;      
                 token = strtok(NULL, " ");
             }
+            args[i] = NULL;
+            // create the instance of the process
+            struct bg_pro* next_pro = (struct bg_pro*)malloc(sizeof(struct bg_pro));
+                next_pro->pid = pid;
+                next_pro->command = args;
+                next_pro->next = NULL;
+
+            if (pid == -1) {
+                perror("Failed to fork");
+            } else if (pid == 0) { 
+                // child process                                
+                    // take the process off top of list and execute then shift root down one 
+                if (execvp(args[0], args) == -1) {
+                    perror("execvp failed");
+                }
+                exit(EXIT_FAILURE);
+            } else {
+                // parent process          
+                    // check if this is the first process - if so set it to the root - if not add it to the end of the list       
+                if (root.next == NULL) { //? or should this be if pid == 0
+                    root.next = next_pro;
+                } else {
+                    struct bg_pro* node = &root;
+                    while (node->next != NULL) {
+                        node = node->next;
+                    }
+                    node->next = next_pro;                 
+                }
+                printf("starting bg process: %s with pid: %d\n", args[0], pid);
+
+            }
+            // now once a child process finishes executing, remove it from the list and print that it is finished in the formatted way specified
         } else if (strcmp(first_token, "bglist") == 0){
             //* BACKGROUND EXECUTION LIST
             printf("first_token is bglist\n");
@@ -82,14 +133,13 @@ int main(int argc, char *argv[]) {
             break;
         } else {
             //* FOREGROUND EXECUTION
-            printf("first_token is a function to run\n");      
             pid_t pid = fork();
             if (pid == -1) {
                 perror("Failed to fork");
             } else if (pid == 0) {
                 // now in child process so execute the command using execvp
                 // get the args into something that execvp can take as a param COME BACK TO THIS 
-                char *args[10];
+                char *args[10]; //! what should this number be?
                 int i = 0;       
                 args[i++] = first_token;         
                 while (token!=NULL) {
@@ -106,7 +156,7 @@ int main(int argc, char *argv[]) {
                 //TODO what do I do in here?
                 int status;
                 waitpid(pid, &status, 0);
-                printf("Child process finished with status: %d\n", WEXITSTATUS(status));
+                // printf("Child process finished with status: %d\n", WEXITSTATUS(status));
             }
         }       
     }
