@@ -9,6 +9,7 @@
 struct bg_pro {
     pid_t pid;
     char **command; 
+    char cwd[PATH_MAX];
     struct bg_pro* next;
 };
 
@@ -49,6 +50,11 @@ struct bg_pro* new_bg_pro(pid_t pid, char **command) {
     struct bg_pro* new_pro = (struct bg_pro*)malloc(sizeof(struct bg_pro));
     new_pro->pid = pid;
     new_pro->command = command; 
+    char *cwd_result = getcwd(new_pro->cwd, sizeof(new_pro->cwd));
+    if (cwd_result == NULL) {
+        perror("getcwd() is null");
+        exit(EXIT_FAILURE);
+    }
     new_pro->next = NULL;
     return new_pro;
 }
@@ -75,7 +81,12 @@ void remove_bgpro_from_list(struct bg_pro** root, pid_t pid) {
     // removing the root
     if (curr != NULL && curr->pid == pid) {
         *root = curr->next;
-        printf("%d %s has terminated\n", curr->pid, curr->command[0]); //! come back to this to print in right format so the whole command and path is displayed
+        // printf("%d: path %s has terminated\n", curr->pid, curr->command[0]); //! come back to this to print in right format so the whole command and path is displayed
+        printf("%d: %s ", curr->pid, curr->cwd);
+        for (char **user_cmd = curr->command; *user_cmd != NULL; user_cmd++) {
+            printf("%s ", *user_cmd);
+        }
+        printf("has terminated.\n");
         free(curr);            
         return;
     }
@@ -91,20 +102,27 @@ void remove_bgpro_from_list(struct bg_pro** root, pid_t pid) {
     }
     // otherwise remove the matching pid process        
     prev->next = curr->next;
-    printf("%d %s has terminated\n", curr->pid, curr->command[0]); //! come back to this to print in right format so the whole command and path is displayed
+    printf("%d: %s ", curr->pid, curr->cwd);
+    for (char **user_cmd = curr->command; *user_cmd != NULL; user_cmd++) {
+        printf("%s ", *user_cmd);
+    }
+    printf("has terminated.\n");
     free(curr);
 }
 
 void print_bglist(struct bg_pro* root){
     struct bg_pro* temp = root;
+    int counter = 0;
     while(temp != NULL){
-        printf("%d: path ", temp->pid);
+        counter++;
+        printf("%d: %s ", temp->pid, temp->cwd);
         for (char **user_cmd = temp->command; *user_cmd != NULL; user_cmd++) {
             printf("%s ", *user_cmd);
         }
         printf("\n");
         temp = temp->next;
     }
+    printf("Total Background jobs: %d\n", counter);
 }
 
 int main(int argc, char *argv[]) {
@@ -112,6 +130,13 @@ int main(int argc, char *argv[]) {
     // struct bg_pro* root = (struct bg_pro*)malloc(sizeof(struct bg_pro));    
     struct bg_pro* root = NULL;
     while (1) {        
+        //* check for completed child processes and remove them from the linked list
+        if (root != NULL) {
+            pid_t ter = waitpid(0, NULL, WNOHANG);
+            if (ter > 0) {
+                remove_bgpro_from_list(&root, ter);
+            }
+        }
         // printf("testing testing testing\n");
         char* user_input = prompt_input();
         // printf("testing testing testing\n");
@@ -161,27 +186,33 @@ int main(int argc, char *argv[]) {
             args[i] = NULL;
             
             // create new bg_pro and add it to linked list 
-            add_bgpro_to_list(&root, pid, args);
+            // add_bgpro_to_list(&root, pid, args);
 
             if (pid == -1) {
                 perror("Failed to fork");
             } else if (pid == 0) { 
-                // child process                                                    
+                // child process
+                // make it so execvp doesnt output the processes output
+                
+
                 if (execvp(args[0], args) == -1) {
                     perror("execvp failed");
                 }
                 exit(EXIT_FAILURE);
             } else {
-                // parent process          
+                // parent process         
+                //! what am i  doing in here then? 
+                // create new bg_pro and add it to linked list 
+                add_bgpro_to_list(&root, pid, args);
                 printf("starting bg process: %s with pid: %d\n", args[0], pid);
 
                 //* check for completed child processes and remove them from the linked list
-                if (root != NULL) {
-                    pid_t ter = waitpid(0, NULL, WNOHANG);
-                    if (ter > 0) {
-                        remove_bgpro_from_list(&root, ter);
-                    }
-                }
+                // if (root != NULL) {
+                //     pid_t ter = waitpid(0, NULL, WNOHANG);
+                //     if (ter > 0) {
+                //         remove_bgpro_from_list(&root, ter);
+                //     }
+                // }
             }
             // now once a child process finishes executing, remove it from the list and print that it is finished in the formatted way specified
         } else if (strcmp(first_token, "bglist") == 0){
