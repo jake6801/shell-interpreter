@@ -1,4 +1,3 @@
-// check im allowed to use all of these 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,6 +6,9 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
+//* HELPER FUNCTIONS
+
+// bg_pro struct to hold info for outputting in bglist and for termination 
 struct bg_pro {
     pid_t pid;
     char **command; 
@@ -44,10 +46,13 @@ char* prompt_input(){
 }
 
 char **args_copy(char **args) {
+    // get size of args to store 
     int count = 0;
     while (args[count] != NULL) {
         count++;
     }
+
+    // allocate memory and copy args over
     char **copy = malloc((count+1) * sizeof(char *));
     if (copy==NULL) {
         perror("error allocating memory for args");
@@ -57,6 +62,7 @@ char **args_copy(char **args) {
         copy[i] = strdup(args[i]);
         if (copy[i] == NULL) {
             perror("error copying args");
+            free(copy);
             exit(EXIT_FAILURE);
         }
     }
@@ -65,6 +71,7 @@ char **args_copy(char **args) {
 }
 
 void free_args(char **args) {
+    // free dynamic memory allocated for args 
     if (args == NULL) {
         return;
     }
@@ -75,16 +82,21 @@ void free_args(char **args) {
 }
 
 struct bg_pro* new_bg_pro(pid_t pid, char **command) {
+    // allocate memory for bg_pro
     struct bg_pro* new_pro = (struct bg_pro*)malloc(sizeof(struct bg_pro));
     if (new_pro == NULL) {
         perror("error allocating memory for background process");
+        free(new_pro);
         exit(EXIT_FAILURE);
     }
+    
+    // assign values to bg_pro struct and return it
     new_pro->pid = pid;
     new_pro->command = args_copy(command); 
     char *cwd_result = getcwd(new_pro->cwd, sizeof(new_pro->cwd));
     if (cwd_result == NULL) {
         perror("getcwd() is null");
+        free(new_pro);
         exit(EXIT_FAILURE);
     }
     new_pro->next = NULL;
@@ -92,6 +104,7 @@ struct bg_pro* new_bg_pro(pid_t pid, char **command) {
 }
 
 void add_bgpro_to_list(struct bg_pro** root, pid_t pid, char **command) {
+    // create new bg_pro
     struct bg_pro* new_bgpro = new_bg_pro(pid, command);
     if (*root == NULL) {
         // list is empty, make new bg pro the root
@@ -110,7 +123,7 @@ void remove_bgpro_from_list(struct bg_pro** root, pid_t pid) {
     struct bg_pro* curr = *root;
     struct bg_pro* prev = NULL;
 
-    // removing the root
+    // removing the root from linked list
     if (curr != NULL && curr->pid == pid) {
         *root = curr->next;
         printf("%d: %s ", curr->pid, curr->cwd);
@@ -122,7 +135,7 @@ void remove_bgpro_from_list(struct bg_pro** root, pid_t pid) {
         free(curr);            
         return;
     }
-    // remove any other, traverse until matching pid is found 
+    // removing any other bg_pro from linked list, traverse until matching pid is found 
     while (curr != NULL && curr->pid != pid) {
         prev = curr;
         curr = curr->next;
@@ -132,7 +145,7 @@ void remove_bgpro_from_list(struct bg_pro** root, pid_t pid) {
         printf("bg process not found so it cannot be removed\n");
         return;
     }
-    // otherwise remove the matching pid process        
+    // otherwise remove the matching pid process and print that the process has terminated        
     prev->next = curr->next;
     printf("%d: %s ", curr->pid, curr->cwd);
     for (char **user_cmd = curr->command; *user_cmd != NULL; user_cmd++) {
@@ -144,6 +157,7 @@ void remove_bgpro_from_list(struct bg_pro** root, pid_t pid) {
 }
 
 void print_bglist(struct bg_pro* root){
+    // print a list of all the bg_pro's and their pid, cwd, command, arguments and options and total number of bg_pro's
     struct bg_pro* temp = root;
     int counter = 0;
     while(temp != NULL){
@@ -159,6 +173,7 @@ void print_bglist(struct bg_pro* root){
 }
 
 void redirect_output() {
+    // redirect the output of the program to /dev/null so that stdout and stderr dont print to console
     int devnull = open("/dev/null", O_WRONLY);
     if (devnull == -1) {
         perror("error opening /dev/null");
@@ -175,10 +190,23 @@ void redirect_output() {
     close(devnull);
 }
 
+void free_linkedlist(struct bg_pro* root) {
+    // free the memory allocated for the linked list
+    struct bg_pro* curr = root;
+    while (curr != NULL) {
+        struct bg_pro* next = curr->next;
+        free_args(curr->command);
+        free(curr);
+        curr = next;
+    }
+}
+
+
+//* MAIN FUNCTION
 int main(int argc, char *argv[]) {
-    //! do we need to worry about piped commands? or anything involving changing directories and running things?
     // handle Ctrl C in parent process 
     signal(SIGINT, SIG_IGN);
+
     struct bg_pro* root = NULL;
     while (1) {        
         //* check for completed child processes and remove them from the linked list
@@ -192,8 +220,10 @@ int main(int argc, char *argv[]) {
 
         // if user input is empty, reprompt
         if(user_input[0] == '\0'){            
+            free(user_input);
             continue;
         }
+        // otherwise determine if user is changing directories, executing process in background, listing background processes, or executing process in foreground
         char *first_token = strtok(user_input, " ");
         char *token = strtok(NULL, " ");    
         //! need to do something for if the directory doesnt exist
@@ -214,9 +244,7 @@ int main(int argc, char *argv[]) {
             }      
         } else if (strcmp(first_token, "bg") == 0){
             //* BACKGROUND EXECUTION             
-            // fork to create parent and child processes
             pid_t pid = fork();
-            
             // get the command, arguments and options 
             char *args[100]; 
             int i = 0;
@@ -237,6 +265,7 @@ int main(int argc, char *argv[]) {
                 if (execvp(args[0], args) == -1) {
                     perror("execvp failed");
                 }
+                free(user_input);
                 exit(EXIT_FAILURE);
             } else {
                 //* parent process         
@@ -247,7 +276,9 @@ int main(int argc, char *argv[]) {
             //* BACKGROUND PROCESSES LIST            
             print_bglist(root);
         } else if (strcmp(first_token, "exit") == 0){
-            // exit program is user inputs "exit"
+            // exit program if user inputs "exit"
+            free(user_input);
+            free_linkedlist(root);
             break;
         } else {
             //* FOREGROUND EXECUTION
@@ -273,14 +304,16 @@ int main(int argc, char *argv[]) {
                 if (execvp(args[0], args) == -1) {
                     perror("execvp failed");
                 }
+                free(user_input);
                 exit(EXIT_FAILURE);
             } else {
                 //* parent process
                 int status;
                 waitpid(pid, &status, 0);
             }
-        }       
+        }
+        // free user_input after done processing
+        free(user_input);       
     }
     return 0;
 }
-
