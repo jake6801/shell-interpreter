@@ -5,6 +5,7 @@
 #include <limits.h> 
 #include <string.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
 struct bg_pro {
     pid_t pid;
@@ -46,10 +47,45 @@ char* prompt_input(){
     return NULL;
 }
 
+char **args_copy(char **args) {
+    int count = 0;
+    while (args[count] != NULL) {
+        count++;
+    }
+    char **copy = malloc((count+1) * sizeof(char *));
+    if (copy==NULL) {
+        perror("error allocating memory for args");
+        exit(EXIT_FAILURE);
+    }
+    for (int i = 0; i < count; i++) {
+        copy[i] = strdup(args[i]);
+        if (copy[i] == NULL) {
+            perror("error copying args");
+            exit(EXIT_FAILURE);
+        }
+    }
+    copy[count] = NULL;
+    return copy;
+}
+
+void free_args(char **args) {
+    if (args == NULL) {
+        return;
+    }
+    for (int i = 0; args[i] != NULL; i++) {
+        free(args[i]);
+    }
+    free(args);
+}
+
 struct bg_pro* new_bg_pro(pid_t pid, char **command) {
     struct bg_pro* new_pro = (struct bg_pro*)malloc(sizeof(struct bg_pro));
+    if (new_pro == NULL) {
+        perror("error allocating memory for background process");
+        exit(EXIT_FAILURE);
+    }
     new_pro->pid = pid;
-    new_pro->command = command; 
+    new_pro->command = args_copy(command); 
     char *cwd_result = getcwd(new_pro->cwd, sizeof(new_pro->cwd));
     if (cwd_result == NULL) {
         perror("getcwd() is null");
@@ -81,12 +117,12 @@ void remove_bgpro_from_list(struct bg_pro** root, pid_t pid) {
     // removing the root
     if (curr != NULL && curr->pid == pid) {
         *root = curr->next;
-        // printf("%d: path %s has terminated\n", curr->pid, curr->command[0]); //! come back to this to print in right format so the whole command and path is displayed
         printf("%d: %s ", curr->pid, curr->cwd);
         for (char **user_cmd = curr->command; *user_cmd != NULL; user_cmd++) {
             printf("%s ", *user_cmd);
         }
         printf("has terminated.\n");
+        free_args(curr->command);
         free(curr);            
         return;
     }
@@ -107,6 +143,7 @@ void remove_bgpro_from_list(struct bg_pro** root, pid_t pid) {
         printf("%s ", *user_cmd);
     }
     printf("has terminated.\n");
+    free_args(curr->command);
     free(curr);
 }
 
@@ -127,6 +164,8 @@ void print_bglist(struct bg_pro* root){
 
 int main(int argc, char *argv[]) {
     //! do we need to worry about piped commands? or anything involving changing directories and running things?
+    // handle Ctrl C in parent process 
+    signal(SIGINT, SIG_IGN);
     // struct bg_pro* root = (struct bg_pro*)malloc(sizeof(struct bg_pro));    
     struct bg_pro* root = NULL;
     while (1) {        
@@ -147,26 +186,22 @@ int main(int argc, char *argv[]) {
         }
         char *first_token = strtok(user_input, " ");
         char *token = strtok(NULL, " ");    
+        //! need to do something for if the directory doesnt exist
         if (strcmp(first_token, "cd") == 0){
             //* CHANGING DIRECTORIES
             // determine whether to go to home directory or somewhere else
-            if (token == NULL || strcmp(token, "~") == 0) {
-                char *home_dir = getenv("HOME");
-                // if (chdir(home_dir) == 0) {
-                //     printf("successfully changed directory\n");
-                // } else {
-                //     perror("Failed to change directory");
-                // }
+            char *home_dir = getenv("HOME");
+            if (token == NULL || strcmp(token, "~") == 0) {                
                 chdir(home_dir);
             } else {
-                // if (chdir(token) == 0){
-                //     printf("successfully changed directory\n");
-                // } else {
-                //     perror("Failed to change directory");
-                // }
-                chdir(token);
-                //! need to do something for if the directory doesnt exist 
-            }            
+                char first_char = token[0];
+                if (first_char == '~') {
+                    chdir(home_dir);
+                    chdir(token+2);
+                } else {
+                    chdir(token);
+                }   
+            }      
         } else if (strcmp(first_token, "bg") == 0){
             //* BACKGROUND EXECUTION 
             // printf("first_token is bg\n");        
@@ -192,29 +227,33 @@ int main(int argc, char *argv[]) {
                 perror("Failed to fork");
             } else if (pid == 0) { 
                 // child process
-                // make it so execvp doesnt output the processes output
+                // redirect execvp stdout and stderr to /dev/null so it doesnt output to terminal
+                int devnull = open("/dev/null", O_WRONLY);
+                if (devnull == -1) {
+                    perror("error opening /dev/null");
+                    exit(EXIT_FAILURE);
+                }
+                if(dup2(devnull, STDOUT_FILENO) == -1) {
+                    perror("error redirecting stdout to /dev/null");
+                    exit(EXIT_FAILURE);
+                }
+                if(dup2(devnull, STDERR_FILENO) == -1) {
+                    perror("error redirecting stderr to /dev/null");
+                    exit(EXIT_FAILURE);
+                }
+                close(devnull);
                 
-
+                // run execvp with the user input
                 if (execvp(args[0], args) == -1) {
                     perror("execvp failed");
                 }
                 exit(EXIT_FAILURE);
             } else {
                 // parent process         
-                //! what am i  doing in here then? 
-                // create new bg_pro and add it to linked list 
+                    // create new bg_pro and add it to linked list 
                 add_bgpro_to_list(&root, pid, args);
-                printf("starting bg process: %s with pid: %d\n", args[0], pid);
-
-                //* check for completed child processes and remove them from the linked list
-                // if (root != NULL) {
-                //     pid_t ter = waitpid(0, NULL, WNOHANG);
-                //     if (ter > 0) {
-                //         remove_bgpro_from_list(&root, ter);
-                //     }
-                // }
+                // printf("starting bg process: %s with pid: %d\n", args[0], pid);
             }
-            // now once a child process finishes executing, remove it from the list and print that it is finished in the formatted way specified
         } else if (strcmp(first_token, "bglist") == 0){
             //* BACKGROUND EXECUTION LIST            
             //! move this out of the function and just into here once everything done but for now use it for testing bg
@@ -232,6 +271,10 @@ int main(int argc, char *argv[]) {
                 char *args[10]; //! what should this number be?
                 int i = 0;       
                 args[i++] = first_token;         
+
+                // handle Ctrl C in the child process
+                signal(SIGINT, SIG_DFL);
+
                 while (token!=NULL) {
                     args[i++] = token;
                     token = strtok(NULL, " ");
@@ -249,25 +292,6 @@ int main(int argc, char *argv[]) {
                 // printf("Child process finished with status: %d\n", WEXITSTATUS(status));
             }
         }       
-        
-        //* check for completed child processes and remove them from the linked list
-        // if (root.next != NULL) {
-        //     printf("bglist is not empty\n");
-        //     pid_t ter = waitpid(0, NULL, WNOHANG);
-        //     if (ter > 0) {
-        //         if (root->next->pid == ter) {
-        //             printf("%d:  %s has terminated\n", root->next->pid, root->next->command[0]); //! come back to this to figure out how to print the whole command and the path
-        //             root->next = root->next->next;
-        //         } else {
-        //             struct bg_pro* node = &root;
-        //             while (node->next->pid != ter) {
-        //                 node = node->next;
-        //             }
-        //             printf("%d:  %s has terminated\n", root->pid, root->command[0]); //! come back to this to figure out how to print the whole command and the path
-        //             node->next = node->next->next;
-        //         }
-        //     }
-        // }
     }
     return 0;
 }
