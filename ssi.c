@@ -24,14 +24,10 @@ char* prompt_input(){
     }
 
     // read user input 
-    char input[100]; //! find out what number to put here
+    char input[512]; 
     char *token;
     if(fgets(input, sizeof(input), stdin) != NULL){
-        input[strcspn(input, "\n")] = '\0'; //! check I can use this, this removes newline char if present
-        // if input is empty
-        // if (strlen(input) == 0) {
-        //     return strdup("");
-        // }
+        input[strcspn(input, "\n")] = '\0'; 
         
         // free up memory and copy input so it can be returned
         char *input_copy = malloc(strlen(input)+1);
@@ -162,23 +158,37 @@ void print_bglist(struct bg_pro* root){
     printf("Total Background jobs: %d\n", counter);
 }
 
+void redirect_output() {
+    int devnull = open("/dev/null", O_WRONLY);
+    if (devnull == -1) {
+        perror("error opening /dev/null");
+        exit(EXIT_FAILURE);
+    }
+    if(dup2(devnull, STDOUT_FILENO) == -1) {
+        perror("error redirecting stdout to /dev/null");
+        exit(EXIT_FAILURE);
+    }
+    if(dup2(devnull, STDERR_FILENO) == -1) {
+        perror("error redirecting stderr to /dev/null");
+        exit(EXIT_FAILURE);
+    }
+    close(devnull);
+}
+
 int main(int argc, char *argv[]) {
     //! do we need to worry about piped commands? or anything involving changing directories and running things?
     // handle Ctrl C in parent process 
     signal(SIGINT, SIG_IGN);
-    // struct bg_pro* root = (struct bg_pro*)malloc(sizeof(struct bg_pro));    
     struct bg_pro* root = NULL;
     while (1) {        
         //* check for completed child processes and remove them from the linked list
         if (root != NULL) {
-            pid_t ter = waitpid(0, NULL, WNOHANG);
-            if (ter > 0) {
+            pid_t ter;
+            while((ter = waitpid(0, NULL, WNOHANG)) > 0) {
                 remove_bgpro_from_list(&root, ter);
             }
         }
-        // printf("testing testing testing\n");
         char* user_input = prompt_input();
-        // printf("testing testing testing\n");
 
         // if user input is empty, reprompt
         if(user_input[0] == '\0'){            
@@ -190,7 +200,7 @@ int main(int argc, char *argv[]) {
         if (strcmp(first_token, "cd") == 0){
             //* CHANGING DIRECTORIES
             // determine whether to go to home directory or somewhere else
-            char *home_dir = getenv("HOME");
+            char *home_dir = getenv("HOME");            
             if (token == NULL || strcmp(token, "~") == 0) {                
                 chdir(home_dir);
             } else {
@@ -203,45 +213,25 @@ int main(int argc, char *argv[]) {
                 }   
             }      
         } else if (strcmp(first_token, "bg") == 0){
-            //* BACKGROUND EXECUTION 
-            // printf("first_token is bg\n");        
-            // first breakup into parent and child 
-                // would I only be running 1 bg process at a time? (1 child at a time?)
-            
+            //* BACKGROUND EXECUTION             
             // fork to create parent and child processes
             pid_t pid = fork();
-            // get the command and options and put in a list
-            char *args[10]; //! what should this number be?
+            
+            // get the command, arguments and options 
+            char *args[100]; 
             int i = 0;
-            // args[i++] = first_token;
             while (token != NULL) {
                 args[i++] = token;      
                 token = strtok(NULL, " ");
             }
             args[i] = NULL;
-            
-            // create new bg_pro and add it to linked list 
-            // add_bgpro_to_list(&root, pid, args);
 
             if (pid == -1) {
                 perror("Failed to fork");
             } else if (pid == 0) { 
-                // child process
+                //* child process
                 // redirect execvp stdout and stderr to /dev/null so it doesnt output to terminal
-                int devnull = open("/dev/null", O_WRONLY);
-                if (devnull == -1) {
-                    perror("error opening /dev/null");
-                    exit(EXIT_FAILURE);
-                }
-                if(dup2(devnull, STDOUT_FILENO) == -1) {
-                    perror("error redirecting stdout to /dev/null");
-                    exit(EXIT_FAILURE);
-                }
-                if(dup2(devnull, STDERR_FILENO) == -1) {
-                    perror("error redirecting stderr to /dev/null");
-                    exit(EXIT_FAILURE);
-                }
-                close(devnull);
+                redirect_output();
                 
                 // run execvp with the user input
                 if (execvp(args[0], args) == -1) {
@@ -249,16 +239,15 @@ int main(int argc, char *argv[]) {
                 }
                 exit(EXIT_FAILURE);
             } else {
-                // parent process         
-                    // create new bg_pro and add it to linked list 
+                //* parent process         
+                // create new bg_pro and add it to linked list 
                 add_bgpro_to_list(&root, pid, args);
-                // printf("starting bg process: %s with pid: %d\n", args[0], pid);
             }
         } else if (strcmp(first_token, "bglist") == 0){
-            //* BACKGROUND EXECUTION LIST            
-            //! move this out of the function and just into here once everything done but for now use it for testing bg
+            //* BACKGROUND PROCESSES LIST            
             print_bglist(root);
         } else if (strcmp(first_token, "exit") == 0){
+            // exit program is user inputs "exit"
             break;
         } else {
             //* FOREGROUND EXECUTION
@@ -266,30 +255,29 @@ int main(int argc, char *argv[]) {
             if (pid == -1) {
                 perror("Failed to fork");
             } else if (pid == 0) {
-                // now in child process so execute the command using execvp
-                // get the args into something that execvp can take as a param COME BACK TO THIS 
-                char *args[10]; //! what should this number be?
-                int i = 0;       
-                args[i++] = first_token;         
-
+                //* child process                         
                 // handle Ctrl C in the child process
                 signal(SIGINT, SIG_DFL);
 
-                while (token!=NULL) {
+                // get the command, arguments and options  
+                char *args[100];
+                int i = 0;       
+                args[i++] = first_token;
+                while (token != NULL) {
                     args[i++] = token;
                     token = strtok(NULL, " ");
                 }
                 args[i] = NULL;
+
+                // run execvp with the user input 
                 if (execvp(args[0], args) == -1) {
                     perror("execvp failed");
                 }
                 exit(EXIT_FAILURE);
             } else {
-                // in the parent process so wait for the child to finish process 
-                //TODO what do I do in here?
+                //* parent process
                 int status;
                 waitpid(pid, &status, 0);
-                // printf("Child process finished with status: %d\n", WEXITSTATUS(status));
             }
         }       
     }
