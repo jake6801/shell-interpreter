@@ -173,7 +173,7 @@ void print_bglist(struct bg_pro* root){
 }
 
 void redirect_output() {
-    // redirect the output of the program to /dev/null so that stdout and stderr dont print to console
+    // redirect the output of the program to /dev/null so that stdout and stderr dont print to console    
     int devnull = open("/dev/null", O_WRONLY);
     if (devnull == -1) {
         perror("error opening /dev/null");
@@ -226,20 +226,24 @@ int main(int argc, char *argv[]) {
         // otherwise determine if user is changing directories, executing process in background, listing background processes, or executing process in foreground
         char *first_token = strtok(user_input, " ");
         char *token = strtok(NULL, " ");    
-        //! need to do something for if the directory doesnt exist
         if (strcmp(first_token, "cd") == 0){
             //* CHANGING DIRECTORIES
             // determine whether to go to home directory or somewhere else
             char *home_dir = getenv("HOME");            
             if (token == NULL || strcmp(token, "~") == 0) {                
-                chdir(home_dir);
+                if (chdir(home_dir) != 0) {
+                    perror("cd");                    
+                }
             } else {
                 char first_char = token[0];
                 if (first_char == '~') {
-                    chdir(home_dir);
-                    chdir(token+2);
+                    if (chdir(home_dir) != 0 || chdir(token+2) != 0) {
+                        fprintf(stderr, "cd: No such file or directory: %s/%s\n", home_dir, token+2);
+                    }
                 } else {
-                    chdir(token);
+                    if (chdir(token) != 0) {
+                        fprintf(stderr, "cd: No such file or directory: %s\n", token);
+                    }
                 }   
             }      
         } else if (strcmp(first_token, "bg") == 0){
@@ -263,7 +267,7 @@ int main(int argc, char *argv[]) {
                 
                 // run execvp with the user input
                 if (execvp(args[0], args) == -1) {
-                    perror("execvp failed");
+                    perror(args[0]);
                 }
                 free(user_input);
                 exit(EXIT_FAILURE);
@@ -302,7 +306,7 @@ int main(int argc, char *argv[]) {
 
                 // run execvp with the user input 
                 if (execvp(args[0], args) == -1) {
-                    perror("execvp failed");
+                    perror(args[0]);
                 }
                 free(user_input);
                 exit(EXIT_FAILURE);
